@@ -33,7 +33,6 @@ class User(ParseResource):
     A User is like a regular Parse object (can be modified and saved) but
     it requires additional methods and functionality
     '''
-    ENDPOINT_ROOT = '/'.join([API_ROOT, 'users'])
     PROTECTED_ATTRIBUTES = ParseResource.PROTECTED_ATTRIBUTES + [
         'username', 'sessionToken', 'emailVerified']
 
@@ -57,10 +56,8 @@ class User(ParseResource):
     @login_required
     def save(self, batch=False):
         session_header = {'X-Parse-Session-Token': self.sessionToken}
-        url = self._absolute_url
         data = self._to_native()
-
-        response = User.PUT(url, extra_headers=session_header, batch=batch, **data)
+        response = User.PUT(objectId=self.objectId, extra_headers=session_header, batch=batch, **data)
 
         def call_back(response_dict):
             self.updatedAt = response_dict['updatedAt']
@@ -73,37 +70,33 @@ class User(ParseResource):
     @login_required
     def delete(self):
         session_header = {'X-Parse-Session-Token': self.sessionToken}
-        return User.DELETE(self._absolute_url, extra_headers=session_header)
+        return User.DELETE(objectId=self.objectId, extra_headers=session_header)
 
     @classmethod
     def signup(cls, username, password, **kw):
-        response_data = User.POST('', username=username, password=password, **kw)
+        response_data = User.POST(username=username, password=password, **kw)
         response_data.update({'username': username})
         return cls(**response_data)
 
     @classmethod
     def login(cls, username, passwd):
-        login_url = '/'.join([API_ROOT, 'login'])
-        return cls(**User.GET(login_url, username=username, password=passwd))
+        return cls(**ParseResource.GET(uri='login', username=username, password=passwd))
 
     @classmethod
     def login_auth(cls, auth):
-        login_url = User.ENDPOINT_ROOT
-        return cls(**User.POST(login_url, authData=auth))
+        return cls(**User.POST(authData=auth))
 
     @classmethod
     def current_user(cls):
-        user_url = '/'.join([API_ROOT, 'users/me'])
-        return cls(**User.GET(user_url))
+        return cls(**ParseResource.GET(uri='users/me'))
 
     @staticmethod
     def request_password_reset(email):
         '''Trigger Parse\'s Password Process. Return True/False
         indicate success/failure on the request'''
 
-        url = '/'.join([API_ROOT, 'requestPasswordReset'])
         try:
-            User.POST(url, email=email)
+            ParseResource.POST(uri='requestPasswordReset', email=email)
             return True
         except ParseError:
             return False
@@ -133,12 +126,13 @@ class User(ParseResource):
                     } for objectId in objectsId]
 
         payload = {
+            'objectId': self.objectId,
             key: {
                  "__op": action,
                  "objects": objects
                 }
             }
-        self.__class__.PUT(self._absolute_url, **payload)
+        self.__class__.PUT(**payload)
 
         # Commented this line out to fix the saving relation issue --
         # it's better to just return None in Relation._to_native

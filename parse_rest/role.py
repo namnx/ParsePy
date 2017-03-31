@@ -22,7 +22,6 @@ class Role(Object):
     A Role is like a regular Parse object (can be modified and saved) but
     it requires additional methods and functionality
     '''
-    ENDPOINT_ROOT = '/'.join([API_ROOT, 'roles'])
 
     @property
     def className(self):
@@ -30,10 +29,6 @@ class Role(Object):
 
     def __repr__(self):
         return '<Role:%s (Id %s)>' % (getattr(self, 'name', None), self.objectId)
-
-    @classmethod
-    def set_endpoint_root(cls):
-        return cls.ENDPOINT_ROOT
 
 
 Role.Query = QueryManager(Role)

@@ -1,15 +1,14 @@
-Note: As of May 13, 2016, this repository (`milesrichardson/ParsePy)` is the
-most up-to-date and active python client for the Parse API. It supports self-hosted
-`parse-server` via the REST API. Note that some features will not work with parse-server,
-if they are not supported by the REST API (e.g. push).
+This repository is a fork of ParsePy (<https://github.com/milesrichardson/ParsePy>) to 
+help working with self-hosted `parse-server` easier. It is a Pyhton client for self-hosted
+`parse-server` via the REST API. Parse.com API was shutdown and some of its features 
+will not available in self-hosted `parse-server`.
 
-See the section below, "using with self-hosted parse-server," for instructions.
 
 parse_rest
 ==========
 
-**parse_rest** is a Python client for the [Parse REST
-  API](https://www.parse.com/docs/rest). It provides:
+**parse_rest** is a Python client for the [Parse REST API](http://parseplatform.org/docs/rest/guide/). 
+It provides:
 
   - Python object mapping for Parse objects with methods to save,
   update, and delete objects, as well as an interface for querying
@@ -18,7 +17,6 @@ parse_rest
   - User authentication, account creation** (signup) and querying.
   - Cloud code integration
   - Installation querying
-  - push
   - Roles/ACLs**
   - Image/File type support (done 1/14/17)
 
@@ -32,40 +30,12 @@ Installation
 The easiest way to install this package is by downloading or
 cloning this repository:
 
-    pip install git+https://github.com/milesrichardson/ParsePy.git
+    pip install git+https://github.com/namnx/ParsePy.git
 
 Note: The version on [PyPI](http://pypi.python.org/pypi) is not
 up-to-date. The code is still under lots of changes and the stability
 of the library API - though improving - is not guaranteed. Please
 file any issues that you may find if documentation/application.
-
-
-Using with self-hosted `parse-server`
--------------
-
-To use the library with self-hosted parse-server, set the environment variable
-`PARSE_API_ROOT` before importing the module.
-
-Example:
-
-~~~~~ {python}
-import os
-os.environ["PARSE_API_ROOT"] = "http://your_server.com:1337/parse"
-
-# Everything else same as usual
-
-from parse_rest.datatypes import Function, Object, GeoPoint
-from parse_rest.connection import register
-from parse_rest.query import QueryResourceDoesNotExist
-from parse_rest.connection import ParseBatcher
-from parse_rest.core import ResourceRequestBadRequest, ParseError
-
-APPLICATION_ID = '...'
-REST_API_KEY = '...'
-MASTER_KEY = '...'
-
-register(APPLICATION_ID, REST_API_KEY, master_key=MASTER_KEY)
-~~~~~
 
 
 Testing
@@ -96,6 +66,7 @@ You can then test the installation by running the following command:
     # or test individually
     python -m unittest parse_rest.tests.TestObject.testCanCreateNewObject
 
+
 Usage
 -----------
 
@@ -117,7 +88,7 @@ your *master key*.
 
 ~~~~~ {python}
 from parse_rest.connection import register
-register(<application_id>, <rest_api_key>[, master_key=None])
+register(<api_root>, <application_id>, <rest_api_key>[, master_key=None])
 ~~~~~
 
 Once your application calls `register`, you will be able to read, write

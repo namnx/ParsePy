@@ -24,14 +24,14 @@ from parse_rest.installation import Push
 try:
     import settings_local
 except ImportError:
-    sys.exit('You must create a settings_local.py file with APPLICATION_ID, ' \
+    sys.exit('You must create a settings_local.py file with API_ROOT, APPLICATION_ID, ' \
                  'REST_API_KEY, MASTER_KEY variables set')
 
-
 register(
+    getattr(settings_local, 'API_ROOT'),
     getattr(settings_local, 'APPLICATION_ID'),
     getattr(settings_local, 'REST_API_KEY'),
-    master_key=getattr(settings_local, 'MASTER_KEY')
+    master_key=getattr(settings_local, 'MASTER_KEY'),
 )
 
 GLOBAL_JSON_TEXT = """{
@@ -421,7 +421,7 @@ class TestFunction(unittest.TestCase):
             outf.write(GLOBAL_JSON_TEXT % (settings_local.APPLICATION_ID,
                                            settings_local.MASTER_KEY))
         try:
-            subprocess.call(["parse", "deploy"])
+            subprocess.call(["parse-cli", "deploy"])
         except OSError as why:
             print("parse command line tool must be installed " \
                 "(see https://www.parse.com/docs/cloud_code_guide)")
@@ -538,6 +538,7 @@ class TestUser(unittest.TestCase):
         self.assertIsNotNone(user.sessionToken)
 
         register(
+            getattr(settings_local, 'API_ROOT'),
             getattr(settings_local, 'APPLICATION_ID'),
             getattr(settings_local, 'REST_API_KEY'),
             session_token=user.sessionToken
@@ -546,6 +547,7 @@ class TestUser(unittest.TestCase):
         current_user = User.current_user()
 
         register(
+            getattr(settings_local, 'API_ROOT'),
             getattr(settings_local, 'APPLICATION_ID'),
             getattr(settings_local, 'REST_API_KEY'),
             master_key=getattr(settings_local, 'MASTER_KEY')
@@ -583,28 +585,28 @@ class TestSessionToken(unittest.TestCase):
     """
     Test SessionToken class enter and exit.
     """
-    def get_access_keys(self):
-        from parse_rest.connection import ACCESS_KEYS
-        return ACCESS_KEYS
+    def get_connection(self):
+        from parse_rest.connection import CONNECTION
+        return CONNECTION
 
     def testWithSessionToken(self):
         with SessionToken(token='asdf'):
-            self.assertIn('session_token', self.get_access_keys())
-        self.assertNotIn('session_token', self.get_access_keys())
+            self.assertIn('session_token', self.get_connection())
+        self.assertNotIn('session_token', self.get_connection())
 
 
 class TestMasterKey(unittest.TestCase):
     """
     Test MasterKey class enter and exit.
     """
-    def get_access_keys(self):
-        from parse_rest.connection import ACCESS_KEYS
-        return ACCESS_KEYS
+    def get_connection(self):
+        from parse_rest.connection import CONNECTION
+        return CONNECTION
 
     def testWithMasterKey(self):
         with MasterKey(master_key='asdf'):
-            self.assertIn('master_key', self.get_access_keys() )
-        self.assertNotIn('master_key', self.get_access_keys() )
+            self.assertIn('master_key', self.get_connection() )
+        self.assertNotIn('master_key', self.get_connection() )
 
 
 def run_tests():

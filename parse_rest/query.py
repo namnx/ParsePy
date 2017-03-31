@@ -42,12 +42,11 @@ class QueryManager(object):
 
     def _fetch(self, **kw):
         klass = self.model_class
-        uri = self.model_class.ENDPOINT_ROOT
-        return [klass(**it) for it in klass.GET(uri, **kw).get('results')]
+        return [klass(**it) for it in klass.GET(**kw).get('results')]
 
     def _count(self, **kw):
         kw.update({"count": 1})
-        return self.model_class.GET(self.model_class.ENDPOINT_ROOT, **kw).get('count')
+        return self.model_class.GET(**kw).get('count')
 
     def all(self):
         return Queryset(self)
@@ -60,6 +59,9 @@ class QueryManager(object):
 
     def get(self, **kw):
         return self.filter(**kw).get()
+
+    def __call__(self, conn):
+        self.conn = conn
 
 
 class Queryset(object):
@@ -178,12 +180,12 @@ class Queryset(object):
         results = self._fetch()
         if len(results) == 0:
             error_message = 'Query against %s returned no results' % (
-                    self._manager.model_class.ENDPOINT_ROOT)
+                    self._manager.model_class.__name__)
             raise QueryResourceDoesNotExist(error_message,
                                             status_code=404)
         if len(results) >= 2:
             error_message = 'Query against %s returned multiple results' % (
-                    self._manager.model_class.ENDPOINT_ROOT)
+                    self._manager.model_class.__name__)
             raise QueryResourceMultipleResultsReturned(error_message,
                                                        status_code=404)
         return results[0]

@@ -16,57 +16,48 @@ from six.moves.urllib.error import HTTPError
 from six.moves.urllib.parse import urlencode, urlparse
 
 import json
-
 from parse_rest import core
-
-import os
-
-API_ROOT = os.environ.get('PARSE_API_ROOT') or 'https://api.parse.com/1'
-
-ACCESS_KEYS = {}
-
+API_ROOT = ''
 
 # Connection can sometimes hang forever on SSL handshake
 CONNECTION_TIMEOUT = 60
+CONNECTION = {}
 
 
-def register(app_id, rest_key, **kw):
-    global ACCESS_KEYS
-    ACCESS_KEYS = {
-        'app_id': app_id,
-        'rest_key': rest_key
-        }
-    ACCESS_KEYS.update(**kw)
+def register(api_root, app_id, rest_key, **kw):
+    global CONNECTION
+    CONNECTION = {'api_root': api_root, 'app_id': app_id, 'rest_key': rest_key}
+    CONNECTION.update(**kw)
 
 
 class SessionToken:
     def __init__(self, token):
-        global ACCESS_KEYS
+        global CONNECTION
         self.token = token
 
     def __enter__(self):
-        ACCESS_KEYS.update({'session_token': self.token})
+        CONNECTION.update({'session_token': self.token})
 
     def __exit__(self, type, value, traceback):
-        del ACCESS_KEYS['session_token']
+        del CONNECTION['session_token']
 
 
 class MasterKey:
     def __init__(self, master_key):
-        global ACCESS_KEYS
+        global CONNECTION
         self.master_key = master_key
 
     def __enter__(self):
-        return ACCESS_KEYS.update({'master_key': self.master_key})
+        return CONNECTION.update({'master_key': self.master_key})
 
     def __exit__(self, type, value, traceback):
-        del ACCESS_KEYS['master_key']
+        del CONNECTION['master_key']
 
 
 def master_key_required(func):
     '''decorator describing methods that require the master key'''
     def ret(obj, *args, **kw):
-        conn = ACCESS_KEYS
+        conn = CONNECTION
         if not (conn and conn.get('master_key')):
             message = '%s requires the master key' % func.__name__
             raise core.ParseError(message)
@@ -79,31 +70,57 @@ def date_handler(obj):
 
 
 class ParseBase(object):
-    ENDPOINT_ROOT = API_ROOT
 
     @classmethod
-    def execute(cls, uri, http_verb, extra_headers=None, batch=False, _body=None, **kw):
+    def get_url(cls, api_root, **kw):
+        if cls.__name__ == 'ParseBatcher':
+            url = api_root + '/batch'
+        elif cls.__name__ == 'Function':
+            url = api_root +  '/functions'
+        elif cls.__name__ == 'Job':
+            url = api_root + '/jobs'
+        elif cls.__name__ == 'Config':
+            url = api_root + '/config' 
+        elif cls.__name__ == 'User':
+            url = api_root + '/users'
+            url += '/' + kw.pop('objectId') if kw.has_key('objectId') else ''
+        elif cls.__name__ == 'Role':
+            url = api_root + '/roles'
+        elif cls.__name__ == 'Installation':
+            url = api_root + '/installations'
+            url += '/' + kw.pop('installation_id') if kw.has_key('installation_id') else ''
+        elif cls.__name__ == 'Push':
+            url = api_root + '/push'
+        elif cls.__name__ == 'File':
+            url = api_root + '/files'
+            url += '/' + kw.pop('name') if kw.has_key('name') else ''
+        elif cls.__name__ == 'ParseResource':
+            url = api_root + '/' + kw.pop('uri')
+        else: 
+            url = '/'.join([api_root, 'classes', cls.__name__])
+            url += '/' + kw.pop('objectId') if kw.has_key('objectId') else ''
+        return url, kw
+
+    @classmethod
+    def execute(cls, http_verb, extra_headers=None, batch=False, _body=None, **kw):
         """
         if batch == False, execute a command with the given parameters and
         return the response JSON.
         If batch == True, return the dictionary that would be used in a batch
         command.
         """
+        api_root = CONNECTION['api_root']
+        url, kw = cls.get_url(api_root, **kw)
         if batch:
-            urlsplitter = urlparse(API_ROOT).netloc
-            ret = {"method": http_verb, "path": uri.split(urlsplitter, 1)[1]}
+            urlsplitter = urlparse(api_root).netloc
+            ret = {"method": http_verb, "path": url.split(urlsplitter, 1)[1]}
             if kw:
                 ret["body"] = kw
             return ret
 
-        if not ('app_id' in ACCESS_KEYS and 'rest_key' in ACCESS_KEYS):
+        if not (CONNECTION.has_key('app_id') and CONNECTION.has_key('rest_key')):
             raise core.ParseError('Missing connection credentials')
 
-        app_id = ACCESS_KEYS.get('app_id')
-        rest_key = ACCESS_KEYS.get('rest_key')
-        master_key = ACCESS_KEYS.get('master_key')
-
-        url = uri if uri.startswith(API_ROOT) else cls.ENDPOINT_ROOT + uri
         if _body is None:
             data = kw and json.dumps(kw, default=date_handler) or "{}"
         else:
@@ -119,8 +136,8 @@ class ParseBase(object):
 
         headers = {
             'Content-type': 'application/json',
-            'X-Parse-Application-Id': app_id,
-            'X-Parse-REST-API-Key': rest_key
+            'X-Parse-Application-Id': CONNECTION['app_id'],
+            'X-Parse-REST-API-Key': CONNECTION['rest_key']
         }
         headers.update(extra_headers or {})
 
@@ -129,13 +146,13 @@ class ParseBase(object):
         else:
             request = Request(url, data, headers)
 
-        if ACCESS_KEYS.get('session_token'):
-            request.add_header('X-Parse-Session-Token', ACCESS_KEYS.get('session_token'))
-        elif master_key:
-            request.add_header('X-Parse-Master-Key', master_key)
-
+        if CONNECTION.get('session_token'):
+            request.add_header('X-Parse-Session-Token', CONNECTION['session_token'])
+        elif CONNECTION.get('master_key'):
+            request.add_header('X-Parse-Master-Key', CONNECTION['master_key'])
+        
         request.get_method = lambda: http_verb
-
+        
         try:
             response = urlopen(request, timeout=CONNECTION_TIMEOUT)
         except HTTPError as e:
@@ -150,20 +167,20 @@ class ParseBase(object):
         return json.loads(response.read().decode('utf-8'))
 
     @classmethod
-    def GET(cls, uri, **kw):
-        return cls.execute(uri, 'GET', **kw)
+    def GET(cls, **kw):
+        return cls.execute('GET', **kw)
 
     @classmethod
-    def POST(cls, uri, **kw):
-        return cls.execute(uri, 'POST', **kw)
+    def POST(cls, **kw):
+        return cls.execute('POST', **kw)
 
     @classmethod
-    def PUT(cls, uri, **kw):
-        return cls.execute(uri, 'PUT', **kw)
+    def PUT(cls, **kw):
+        return cls.execute('PUT', **kw)
 
     @classmethod
-    def DELETE(cls, uri, **kw):
-        return cls.execute(uri, 'DELETE', **kw)
+    def DELETE(cls, **kw):
+        return cls.execute('DELETE', **kw)
 
     @classmethod
     def drop(cls):
@@ -173,7 +190,6 @@ class ParseBase(object):
 
 class ParseBatcher(ParseBase):
     """Batch together create, update or delete operations"""
-    ENDPOINT_ROOT = '/'.join((API_ROOT, 'batch'))
 
     def batch(self, methods):
         """
@@ -186,7 +202,7 @@ class ParseBatcher(ParseBase):
             return
         queries, callbacks = list(zip(*[m(batch=True) for m in methods]))
         # perform all the operations in one batch
-        responses = self.execute("", "POST", requests=queries)
+        responses = self.execute("POST", requests=queries)
         # perform the callbacks with the response data (updating the existing
         # objets, etc)
 

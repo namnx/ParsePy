@@ -17,14 +17,6 @@ from parse_rest.query import QueryManager
 
 
 class Installation(ParseResource):
-    ENDPOINT_ROOT = '/'.join([API_ROOT, 'installations'])
-
-    @classmethod
-    def _get_installation_url(cls, installation_id):
-        """
-        Get the URL for RESTful operations on this particular installation
-        """
-        return '/'.join([cls.ENDPOINT_ROOT, installation_id])
 
     @classmethod
     def update_channels(cls, installation_id, channels_to_add=set(),
@@ -41,16 +33,12 @@ class Installation(ParseResource):
         channels_to_remove: the name of the channel you'd like to unsubscribe the user from
 
         """
-        installation_url = cls._get_installation_url(installation_id)
-        current_config = cls.GET(installation_url)
-
+        current_config = cls.GET(installation_id=installation_id)
         new_channels = list(set(current_config['channels']).union(channels_to_add).difference(channels_to_remove))
-
-        cls.PUT(installation_url, channels=new_channels)
+        cls.PUT(installation_id=installation_id, channels=new_channels)
 
 
 class Push(ParseResource):
-    ENDPOINT_ROOT = '/'.join([API_ROOT, 'push'])
 
     @classmethod
     def _send(cls, data, where=None, **kw):
@@ -61,7 +49,7 @@ class Push(ParseResource):
             if "channels" in kw:
                 kw['where']["channels"] = {"$in": kw.pop("channels")}
 
-        return cls.POST('', data=data, **kw)
+        return cls.POST(data=data, **kw)
 
     @classmethod
     def alert(cls, data, where=None, **kw):

@@ -55,7 +55,6 @@ class ParseType(object):
     @staticmethod
     def convert_to_parse(python_object, as_pointer=False):
         is_object = isinstance(python_object, ParseResource) #User is derived from ParseResouce not Object, check against ParseResource
-
         if is_object and not as_pointer:
             return dict([(k, ParseType.convert_to_parse(v, as_pointer=True))
                          for k, v in python_object._editable_attrs.items()
@@ -296,7 +295,6 @@ class GeoPoint(ParseType):
 
 @complex_type()
 class File(ParseType, ParseBase):
-    ENDPOINT_ROOT = '/'.join([API_ROOT, 'files'])
 
     @classmethod
     def from_native(cls, **kw):
@@ -305,7 +303,6 @@ class File(ParseType, ParseBase):
     def __init__(self, name, content=None, mimetype=None, url=None):
         self._name = name
         self._file_url = url
-        self._api_url = '/'.join([API_ROOT, 'files', name])
         self._content = content
         self._mimetype = mimetype or mimetypes.guess_type(name)
         if not content and not url:
@@ -326,19 +323,16 @@ class File(ParseType, ParseBase):
     def save(self, batch=False):
         if self.url is not None:
             raise ParseError("Files can't be overwritten")
-        uri = '/'.join([self.__class__.ENDPOINT_ROOT, self.name])
         headers = {'Content-type': self.mimetype}
-        response = self.__class__.POST(uri, extra_headers=headers, batch=batch, _body=self._content)
+        response = self.__class__.POST(name=self.name, extra_headers=headers, batch=batch, _body=self._content)
         self._file_url = response['url']
         self._name = response['name']
-        self._api_url = '/'.join([API_ROOT, 'files', self._name])
 
         if batch:
             return response, lambda response_dict: None
 
     def delete(self, batch=False):
-        uri = "/".join([self.__class__.ENDPOINT_ROOT, self.name])
-        response = self.__class__.DELETE(uri, batch=batch)
+        response = self.__class__.DELETE(name=self.name, batch=batch)
 
         if batch:
             return response, lambda response_dict: None
@@ -346,7 +340,6 @@ class File(ParseType, ParseBase):
     mimetype = property(lambda self: self._mimetype)
     url = property(lambda self: self._file_url)
     name = property(lambda self: self._name)
-    _absolute_url = property(lambda self: self._api_url)
 
 
 @complex_type()
@@ -398,22 +391,21 @@ class ACL(ParseType):
 
 
 class Function(ParseBase):
-    ENDPOINT_ROOT = '/'.join((API_ROOT, 'functions'))
 
-    def __init__(self, name):
+    def __init__(self, name, conn=None):
         self.name = name
 
     def __call__(self, **kwargs):
-        return self.POST('/' + self.name, **kwargs)
+        return self.POST(**kwargs)
+
 
 class Job(ParseBase):
-    ENDPOINT_ROOT = '/'.join((API_ROOT, 'jobs'))
 
     def __init__(self, name):
         self.name = name
 
     def __call__(self, **kwargs):
-        return self.POST('/' + self.name, **kwargs)
+        return self.POST(**kwargs)
 
 
 class ParseResource(ParseBase):
@@ -434,7 +426,7 @@ class ParseResource(ParseBase):
         # if object is not loaded and attribute is missing, try to load it
         if not self.__dict__.get('_is_loaded', True):
             del self._is_loaded
-            self._init_attrs(self.GET(self._absolute_url))
+            self._init_attrs(self.GET(objectId=self.objectId))
         return object.__getattribute__(self, attr) #preserve default if attr not exists
 
     def _init_attrs(self, args):
@@ -447,7 +439,6 @@ class ParseResource(ParseBase):
 
     def _to_native(self):
         return ParseType.convert_to_parse(self)
-
 
     def _get_updated_datetime(self):
         return self.__dict__.get('_updated_at') and self._updated_at._date
@@ -468,8 +459,7 @@ class ParseResource(ParseBase):
             return self._create(batch=batch)
 
     def _create(self, batch=False):
-        uri = self.__class__.ENDPOINT_ROOT
-        response = self.__class__.POST(uri, batch=batch, **self._to_native())
+        response = self.__class__.POST(batch=batch, **self._to_native())
 
         def call_back(response_dict):
             self.createdAt = self.updatedAt = response_dict['createdAt']
@@ -481,7 +471,7 @@ class ParseResource(ParseBase):
             call_back(response)
 
     def _update(self, batch=False):
-        response = self.__class__.PUT(self._absolute_url, batch=batch, **self._to_native())
+        response = self.__class__.PUT(batch=batch, objectId=self.objectId, **self._to_native())
 
         def call_back(response_dict):
             self.updatedAt = response_dict['updatedAt']
@@ -492,17 +482,13 @@ class ParseResource(ParseBase):
             call_back(response)
 
     def delete(self, batch=False):
-        response = self.__class__.DELETE(self._absolute_url, batch=batch)
+        response = self.__class__.DELETE(batch=batch, objectId=self.objectId)
         if batch:
             return response, lambda response_dict: None
 
     @property
     def className(self):
         return self.__class__.__name__
-
-    @property
-    def _absolute_url(self):
-        return '%s/%s' % (self.__class__.ENDPOINT_ROOT, self.objectId)
 
     createdAt = property(_get_created_datetime, _set_created_datetime)
     updatedAt = property(_get_updated_datetime, _set_updated_datetime)
@@ -514,16 +500,11 @@ class ParseResource(ParseBase):
 class ObjectMetaclass(type):
     def __new__(mcs, name, bases, dct):
         cls = super(ObjectMetaclass, mcs).__new__(mcs, name, bases, dct)
-        # attr check must be here because of specific six.with_metaclass implemetantion where metaclass is used also for
-        # internal NewBase which hasn't set_endpoint_root method
-        if hasattr(cls, 'set_endpoint_root'):
-            cls.set_endpoint_root()
-            cls.Query = QueryManager(cls)
+        cls.Query = QueryManager(cls)
         return cls
 
 
 class Object(six.with_metaclass(ObjectMetaclass, ParseResource)):
-    ENDPOINT_ROOT = '/'.join([API_ROOT, 'classes'])
 
     @classmethod
     def factory(cls, class_name):
@@ -540,13 +521,6 @@ class Object(six.with_metaclass(ObjectMetaclass, ParseResource)):
             types.extend(t.__subclasses__())
         else:
             return type(class_name, (Object,), {})
-
-    @classmethod
-    def set_endpoint_root(cls):
-        root = '/'.join([API_ROOT, 'classes', cls.__name__])
-        if cls.ENDPOINT_ROOT != root:
-            cls.ENDPOINT_ROOT = root
-        return cls.ENDPOINT_ROOT
 
     @classmethod
     def schema(cls):
@@ -570,12 +544,6 @@ class Object(six.with_metaclass(ObjectMetaclass, ParseResource)):
         cls.PUT(root, **payload)
 
     @property
-    def _absolute_url(self):
-        if not self.objectId:
-            return None
-        return '/'.join([self.__class__.ENDPOINT_ROOT, self.objectId])
-
-    @property
     def as_pointer(self):
         return Pointer(self)
 
@@ -585,12 +553,14 @@ class Object(six.with_metaclass(ObjectMetaclass, ParseResource)):
         it does not wait for save() to be called
         """
         payload = {
+            'objectId': self.objectId,
             key: {
                 '__op': 'Increment',
                 'amount': amount
                 }
-            }
-        self.__class__.PUT(self._absolute_url, **payload)
+        }
+        
+        self.__class__.PUT(**payload)
         self.__dict__[key] += amount
 
     def remove(self, key):
@@ -599,11 +569,12 @@ class Object(six.with_metaclass(ObjectMetaclass, ParseResource)):
         it does not wait for save() to be called.
         """
         payload = {
+            'objectId': self.objectId,
             key: {
                 '__op': 'Delete'
                 }
             }
-        self.__class__.PUT(self._absolute_url, **payload)
+        self.__class__.PUT(**payload)
         del self.__dict__[key]
 
     def removeRelation(self, key, className, objectsId):
@@ -620,13 +591,13 @@ class Object(six.with_metaclass(ObjectMetaclass, ParseResource)):
                     } for objectId in objectsId]
 
         payload = {
+            'objectId': self.objectId,
             key: {
                  "__op": action,
                  "objects": objects
                 }
             }
-        self.__class__.PUT(self._absolute_url, **payload)
-        # self.__dict__[key] = ''
+        self.__class__.PUT(**payload)
 
     def relation(self, key):
         if not hasattr(self, key):
