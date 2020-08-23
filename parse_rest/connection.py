@@ -83,22 +83,22 @@ class ParseBase(object):
             url = api_root + '/config' 
         elif cls.__name__ == 'User':
             url = api_root + '/users'
-            url += '/' + kw.pop('objectId') if kw.has_key('objectId') else ''
+            url += '/' + kw.pop('objectId') if kw.get('objectId') else ''
         elif cls.__name__ == 'Role':
             url = api_root + '/roles'
         elif cls.__name__ == 'Installation':
             url = api_root + '/installations'
-            url += '/' + kw.pop('installation_id') if kw.has_key('installation_id') else ''
+            url += '/' + kw.pop('installation_id') if kw.get('installation_id') else ''
         elif cls.__name__ == 'Push':
             url = api_root + '/push'
         elif cls.__name__ == 'File':
             url = api_root + '/files'
-            url += '/' + kw.pop('name') if kw.has_key('name') else ''
+            url += '/' + kw.pop('name') if kw.get('name') else ''
         elif cls.__name__ == 'ParseResource':
             url = api_root + '/' + kw.pop('uri')
         else: 
             url = '/'.join([api_root, 'classes', cls.__name__])
-            url += '/' + kw.pop('objectId') if kw.has_key('objectId') else ''
+            url += '/' + kw.pop('objectId') if kw.get('objectId') else ''
         return url, kw
 
     @classmethod
@@ -118,7 +118,7 @@ class ParseBase(object):
                 ret["body"] = kw
             return ret
 
-        if not (CONNECTION.has_key('app_id') and CONNECTION.has_key('rest_key')):
+        if not (CONNECTION.get('app_id') and CONNECTION.get('rest_key')):
             raise core.ParseError('Missing connection credentials')
 
         if _body is None:
